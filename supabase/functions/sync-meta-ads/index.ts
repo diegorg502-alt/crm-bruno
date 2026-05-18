@@ -101,7 +101,7 @@ function matchesFilter(campaignName: string, filters: string[] | null | undefine
 }
 
 async function fetchCampaignInsights(adAccountId: string, date: string, token: string) {
-  const url = `https://graph.facebook.com/v22.0/act_${adAccountId}/insights?` +
+  const url = `https://graph.facebook.com/v25.0/act_${adAccountId}/insights?` +
     `fields=campaign_name,spend,actions` +
     `&level=campaign` +
     `&time_range={"since":"${date}","until":"${date}"}` +
@@ -111,7 +111,7 @@ async function fetchCampaignInsights(adAccountId: string, date: string, token: s
 }
 
 async function fetchTopAds(adAccountId: string, monthStart: string, until: string, token: string) {
-  const url = `https://graph.facebook.com/v22.0/act_${adAccountId}/insights?` +
+  const url = `https://graph.facebook.com/v25.0/act_${adAccountId}/insights?` +
     `fields=ad_name,ad_id,campaign_name,spend,actions` +
     `&level=ad` +
     `&time_range={"since":"${monthStart}","until":"${until}"}` +
@@ -238,16 +238,35 @@ Deno.serve(async (req) => {
 
         const perDay: any[] = [];
         let lastDateProcessed: string | null = null;
+        let tokenError = false;
 
         for (const date of dates) {
           const campData = await fetchCampaignInsights(client.meta_ad_account_id, date, META_TOKEN);
           if (campData.error) {
-            perDay.push({ date, error: campData.error.message });
+            perDay.push({ date, error: campData.error.message, code: campData.error.code });
+            // OAuth error code 190 = token invalido/caducado. Marca y para.
+            if (campData.error.code === 190 || campData.error.type === 'OAuthException') {
+              tokenError = true;
+              break;
+            }
             continue;
           }
           const { summary, seenCampaigns } = applyDayInsights(S, date, campData, client.canales || [], filters);
           perDay.push({ date, kpis: summary, campaigns: seenCampaigns });
           lastDateProcessed = date;
+        }
+
+        // Si hubo error de token, deja una marca visible en crm_data para que
+        // el panel muestre el banner de "token caducado" en el sidebar.
+        if (tokenError) {
+          S.meta_token_status = {
+            valid: false,
+            error_at: new Date().toISOString(),
+            last_error: perDay.find(d => d.error)?.error || 'OAuth error',
+          };
+        } else if (lastDateProcessed) {
+          // Si volvió a funcionar, limpia el estado anterior.
+          S.meta_token_status = { valid: true, last_ok_at: new Date().toISOString() };
         }
 
         let topAdsCount = 0;
