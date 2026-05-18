@@ -33,6 +33,20 @@ Tras mergear, añadir entrada al CHANGELOG con: archivos afectados, qué se camb
 
 ---
 
+## 2026-05-18
+
+### `sync-meta-ads` v39: Graph API v25.0 + detección de token caducado
+- **Archivo**: `supabase/functions/sync-meta-ads/index.ts`
+- **API**: `https://graph.facebook.com/v22.0/` → `v25.0/`. Meta deprecará v22-v24 el 9 junio 2026.
+- **Token caducado**: si Meta devuelve `error.code === 190` o `error.type === 'OAuthException'`, la función:
+  - Para de intentar más días (evita gastar tiempo en errores inevitables).
+  - Marca `S.meta_token_status = { valid: false, error_at, last_error }` en `crm_data` del cliente. El panel podrá leer este campo para mostrar banner "Token Meta caducado".
+  - Cuando vuelve a funcionar: `{ valid: true, last_ok_at }`.
+- **Contexto**: hoy descubrimos que el token de Meta está invalidado (probable cambio de contraseña o revocación). El cron corría con status 200 pero internamente todas las llamadas a Graph API fallaban silenciosamente, dejando inversión a 0 sin alerta visible para Diego.
+- **Pendiente acción Diego**: regenerar token en Facebook Business + actualizar secret `META_ACCESS_TOKEN` en Supabase. Luego backfill manual.
+
+---
+
 ## 2026-05-15
 
 ### Admin = vista del cliente activo (derogada R1 original)
