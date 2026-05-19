@@ -31,9 +31,33 @@ Nunca commit directo a `main`. Cada cambio: rama → PR → merge. Vercel deploy
 ### R4 — Toda acción se documenta aquí
 Tras mergear, añadir entrada al CHANGELOG con: archivos afectados, qué se cambió, por qué.
 
+### R5 — Scope explícito por cliente (NO extender a otros)
+**Si Diego dice "para X cliente" (Zerochats, Lucas, Bruno…), el cambio aplica SOLO a ese cliente.** Es responsabilidad del implementador limitar el código (via flag, condicional `HAS_TICKET_MENSUAL`, `record_id`, etc.) para que no afecte a los demás.
+
+Ejemplos de errores a evitar:
+- Diego: "en Zerochats los leads vienen del webhook GHL" → mal: cambiar el cálculo de leads globalmente para todos. Bien: solo cuando `HAS_TICKET_MENSUAL`.
+- Diego: "agendaLlamada=SI cuenta solo si está explícito" en contexto Zerochats → mal: aplicar criterio estricto a Lucas/Bruno/etc. Bien: solo en Zerochats; resto sigue criterio laxo.
+
+Cuando un cambio sea genuinamente universal (ej. simplificación de UI sin lógica de negocio diferente entre clientes), está bien aplicarlo global, pero debe estar claramente justificado en el PR/CHANGELOG.
+
 ---
 
 ## 2026-05-18
+
+### Reestructurar scope: agendoLlamada + leads totales → solo Zerochats
+- **Archivo**: `index.html` (`agendoLlamada`, `renderMes`, `vistaKpisMes`)
+- **Bug previo (R5 violada)**: dos cambios anteriores pedidos por Diego en contexto Zerochats se habían aplicado globalmente:
+  1. `agendoLlamada` estricto (solo SI cuenta) → afectaba a Lucas/Bruno/etc. cuyas filas no tienen el campo nuevo.
+  2. Leads totales del agregado = `S.llamadas` no recurrentes → cambiaba el cálculo de leads para todos los clientes.
+- **Corrección**: ambos cambios ahora solo aplican cuando `HAS_TICKET_MENSUAL` (Zerochats). Para los demás clientes:
+  - `agendoLlamada(r)`: criterio laxo. Solo `agendaLlamada='NO'` excluye; vacío y SI cuentan.
+  - Leads totales = suma de `S.kpis_diarios.leads` (Meta Ads) — vuelta al comportamiento original.
+- **Cambios que sí quedan globales** (porque son simplificaciones de UI universalmente correctas):
+  - Quitar grupo "Tráfico" del agregado mensual.
+  - ROAS/ROI/CAC solo en acordeones de canal.
+  - Ticket medio visible para todos.
+  - Métrica "% Cierre leads" (información extra, no afecta cálculos previos).
+- **Nueva regla R5** añadida al inicio del CHANGELOG.
 
 ### `sync-meta-ads` v39: Graph API v25.0 + detección de token caducado
 - **Archivo**: `supabase/functions/sync-meta-ads/index.ts`
