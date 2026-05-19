@@ -1419,18 +1419,28 @@ function rangeLabel(){
 }
 
 // ── Filtros AGENDA LLAMADA + RECURRENTE ─────────────────────────
-// Una fila cuenta como "llamada agendada" si:
-//   - agendaLlamada === 'SI' (explícito)
-//   - o si tiene asistencia marcada (SI/NO) sin el campo agendaLlamada
-//     definido (backwards compat con datos importados antes de añadir la columna,
-//     ej. import histórico de Lucas).
-// agendaLlamada === 'NO' o vacío sin asistencia → NO cuenta.
+// Una fila cuenta como "llamada agendada" según el modelo del cliente:
+//
+// • Zerochats (HAS_TICKET_MENSUAL): criterio ESTRICTO. Solo cuenta si
+//   agendaLlamada='SI' explícito o si tiene asistencia marcada (compat con
+//   datos antiguos). Los registros del webhook GHL llegan con asistencia=
+//   PENDIENTE y sin agendaLlamada → NO cuentan hasta que Diego marque SI.
+//
+// • Resto de clientes: criterio LAXO (comportamiento original previo al
+//   campo agendaLlamada). Si Diego lo marca 'NO' explícito, no cuenta. En
+//   cualquier otro caso (SI o vacío), sí cuenta — todas las filas en
+//   S.llamadas son llamadas ya agendadas históricamente.
 function agendoLlamada(r){
   if (!r) return false;
-  if (r.agendaLlamada === 'SI') return true;
   if (r.agendaLlamada === 'NO') return false;
-  // Compat: datos antiguos sin agendaLlamada pero con asistencia=SI/NO
-  return r.asistencia === 'SI' || r.asistencia === 'NO';
+  if (r.agendaLlamada === 'SI') return true;
+  // Vacío: depende del modelo del cliente.
+  if (typeof HAS_TICKET_MENSUAL !== 'undefined' && HAS_TICKET_MENSUAL) {
+    // Zerochats: vacío solo cuenta si tiene asistencia marcada (compat).
+    return r.asistencia === 'SI' || r.asistencia === 'NO';
+  }
+  // Resto: vacío cuenta como agendada (comportamiento original).
+  return true;
 }
 // Una fila "recurrente" (cobro de cuota antigua) NO cuenta como cliente nuevo,
 // ni en ventas, ni en CPA, ni en embudo. Solo en facturación y caja.
@@ -1522,12 +1532,17 @@ function renderMes(){
   const ventasAgendAsist=rowsAgend.filter(r=>r.estado==='Venta' && r.asistencia==='SI').length;
   const kd=getMesKd(mk);
   const inv=kd.reduce((s,k)=>s+Number(k.inversion||0),0);
-  // LEADS TOTALES (agregado): todas las personas registradas en el mes,
-  // independientemente del embudo (ads, referidos, orgánico, webhook GHL...).
-  // No es lo mismo que los "leads de ads" (esos viven en cada acordeón de canal
-  // ADS y vienen de S.kpis_diarios / Meta API). Aquí: 1 fila = 1 lead. Se
-  // excluyen recurrentes (no son leads nuevos, solo cobros).
-  const leads=rows.filter(r=>!esRecurrente(r)).length;
+  // LEADS TOTALES (agregado) — distinguir por modelo del cliente:
+  //
+  // • Zerochats (HAS_TICKET_MENSUAL): los leads llegan al CRM vía webhook GHL.
+  //   1 fila en S.llamadas = 1 lead. Excluimos recurrentes (no son leads nuevos).
+  //
+  // • Resto de clientes: los leads vienen de Meta Ads (S.kpis_diarios.leads).
+  //   No tienen webhook GHL trayendo registros individuales — las filas en
+  //   S.llamadas son llamadas ya agendadas, no leads.
+  const leads = (typeof HAS_TICKET_MENSUAL !== 'undefined' && HAS_TICKET_MENSUAL)
+    ? rows.filter(r=>!esRecurrente(r)).length
+    : kd.reduce((s,k)=>s+Number(k.leads||0),0);
   const fact=ingresos.reduce((s,r)=>s+Number(r.facturacion||0),0);
   const caja=ingresos.reduce((s,r)=>s+Number(r.caja||0),0);
   const llamadasTotal=rowsAgend.length;
@@ -3305,14 +3320,18 @@ function vistaKpisMes(mk, filtro){
   const ventasAgendAsist = clAgend.filter(r=>r.estado==='Venta' && r.asistencia==='SI').length;
   const inv = (filtro==='GENERAL' ? kd : kd.filter(k=>String(k.canal||'').toUpperCase()===filtro))
     .reduce((s,k)=>s+Number(k.inversion||0),0);
-  // Leads:
-  // - GENERAL → todas las personas registradas en el mes (no solo ads).
-  // - Canal específico → leads de Meta Ads para ese canal (de S.kpis_diarios).
-  //   Si el canal no tiene datos de Meta (REFERIDOS/ORGÁNICO), cuenta filas
-  //   filtradas por embudo en S.llamadas.
+  // Leads: depende del modelo del cliente y del filtro.
+  // • Zerochats (HAS_TICKET_MENSUAL): los leads llegan al CRM vía webhook GHL.
+  //   GENERAL → filas no recurrentes. Canal → filas filtradas por embudo.
+  // • Resto de clientes: leads de Meta Ads (S.kpis_diarios).
+  //   GENERAL → suma kd. Canal → kd filtrado. Si REFERIDOS/ORGÁNICO sin
+  //   datos Meta, fallback a filas filtradas.
+  const isZerochats = typeof HAS_TICKET_MENSUAL !== 'undefined' && HAS_TICKET_MENSUAL;
   let leads;
-  if(filtro==='GENERAL'){
+  if (isZerochats) {
     leads = cl.filter(r=>!esRecurrente(r)).length;
+  } else if (filtro==='GENERAL') {
+    leads = kd.reduce((s,k)=>s+Number(k.leads||0),0);
   } else {
     const metaLeads = kd.filter(k=>String(k.canal||'').toUpperCase()===filtro)
       .reduce((s,k)=>s+Number(k.leads||0),0);
