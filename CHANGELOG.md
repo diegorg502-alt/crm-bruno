@@ -112,6 +112,50 @@ Cuando un cambio sea genuinamente universal (ej. simplificación de UI sin lógi
   `panel-de-metricas.vercel.app` como `zerochats-crm.vercel.app`
   automáticamente (ambos proyectos están conectados al mismo repo + rama).
 
+### Login: auto-guardado por equipo + ojito para ver contraseña
+
+- **Archivo**: `index.html` (CSS, markup del login screen, bloque AUTH).
+- **Aplicabilidad**: GLOBAL (R5 justificada — mejora de UX universal, no
+  cambia lógica de negocio por cliente).
+
+**Qué cambia**:
+
+1. **Login envuelto en `<form>`** con `autocomplete="on"`, `name="email"` y
+   `name="password"`. Esto activa el password manager nativo del navegador
+   (Chrome/Safari/1Password/etc.) y dispara el diálogo "Guardar contraseña"
+   tras el primer login exitoso. Antes el form no era reconocido como tal
+   y por eso ningún navegador lo ofrecía.
+
+2. **Checkbox "Recordarme en este equipo"** (marcado por defecto):
+   - Si está marcado al hacer login OK: se guarda `email` + `password`
+     (ofuscado con `btoa`) en `localStorage` bajo la clave `crm_creds_v1`.
+   - En la siguiente visita / tras logout, los campos se autocompletan.
+   - Si se desmarca: se borra cualquier credencial previa.
+
+3. **Ojito (toggle visibilidad de contraseña)**: botón al lado del input
+   con icono de ojo abierto/tachado (SVG inline). Click alterna entre
+   `type=password` y `type=text`. Útil para revisar lo que se escribió
+   antes de pulsar Entrar.
+
+4. **Tecla Enter**: ahora la maneja el `<form>` nativamente (vía
+   `onsubmit`). Se eliminó el listener manual de `keydown` que existía
+   antes porque duplicaba el envío.
+
+**Seguridad — qué tener en cuenta**:
+
+- `btoa(password)` NO es cifrado, es base64 — cualquiera con devtools en
+  el equipo del usuario puede decodificarlo. La defensa real está en la
+  capa del SO: el password manager del navegador guarda en el keychain
+  del sistema (cifrado en disco). Por eso forzamos los dos mecanismos en
+  paralelo: nativo (cifrado) + localStorage (conveniencia).
+- Para tools internas con 7 usuarios cada uno con su Mac/PC personal, el
+  riesgo es bajo y el beneficio en UX es alto. Si un cliente compartiera
+  ordenador, debe **desmarcar** "Recordarme en este equipo".
+- En logout NO se purga el localStorage. Diego lo pidió así implícitamente
+  ("autoguardado en cada ordenador"): mantener la sesión recordada entre
+  cierres de sesión. Para purgarlo manualmente: devtools → Application →
+  Local Storage → borrar `crm_creds_v1`.
+
 ---
 
 ## 2026-05-18
