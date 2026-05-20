@@ -42,6 +42,78 @@ Cuando un cambio sea genuinamente universal (ej. simplificación de UI sin lógi
 
 ---
 
+## 2026-05-20
+
+### Carpeta dedicada `clients/zerochats/` + subdominio Vercel
+
+- **Carpeta nueva**: `/clients/zerochats/` agrupa toda la documentación
+  específica de Zerochats (el único SaaS de Agencia Legado). Estructura:
+  - `README.md`: visión general + flags activos + reglas de oro.
+  - `functions/README.md`: punteros a las 4 edge functions específicas
+    (`sync-ghl-zerochats`, `ghl-registrado-webhook`, `dedupe-cuotas-zerochats`,
+    `reconcile-zerochats-csv`) con sus comandos de deploy y secrets.
+  - `docs/pricing.md`: planes PRO/BUSINESS/ANUAL + distinción
+    facturación vs caja.
+  - `docs/stripe-fee.md`: por qué la caja BUSINESS es 374€ (no 397€).
+  - `docs/ghl-integration.md`: setup del webhook + sync diario.
+  - `docs/data-model.md`: estructura del JSONB de Zerochats + campos
+    exclusivos (`recurrente`, `pagos`, `agendoLlamada` estricto).
+  - `docs/churn.md`: cómo detectamos churn + fórmulas MRR/LTV pendientes.
+  - `docs/deployment.md`: stack completo + cómo se configuró el subdominio.
+  - `migrations/README.md`: convención para guardar SQL manual ejecutado
+    sobre `crm_data` de `zerochats_2026`.
+- **Decisión de diseño**: las edge functions reales **NO se mueven** de
+  `/supabase/functions/` (el CLI de Supabase las espera ahí). La nueva
+  carpeta solo documenta, no duplica código.
+
+### URL dedicada `zerochats-crm.vercel.app` (proyecto Vercel propio)
+
+- **Archivo**: `index.html` (`showApp`, nuevo helper `getForcedRecordFromHost`).
+- **Decisión de arquitectura**: en vez de añadir un subdominio anidado al
+  proyecto existente (`zerochats.panel-de-metricas.vercel.app`), creamos un
+  **proyecto Vercel separado** llamado `zerochats-crm` apuntando al mismo
+  repositorio de GitHub y rama `main`. Vercel le asigna automáticamente
+  `https://zerochats-crm.vercel.app` sin necesidad de configurar DNS.
+- **Ventajas frente al subdominio**:
+  - URL más limpia y "marca propia" para Zerochats.
+  - Logs, métricas y deploys independientes (sin mezclarse con los del panel
+    principal).
+  - Permite a futuro distintos secrets / env vars si hiciese falta.
+  - Se configuró sin tener que tocar la UI de Vercel (vía CLI).
+- **Qué hace el frontend**: detección de host. Si `window.location.host`
+  empieza por `zerochats-crm` (o `zerochats.`), el panel:
+  - Resuelve el cliente vía `crm_clients.record_id = 'zerochats_2026'`.
+  - Llama `loadClientConfig` con ese email.
+  - Oculta `#admin-client-selector` aunque el usuario sea admin.
+  - Quita `body.is-admin` (vista de cliente puro).
+  - Cambia `document.title` a "Zerochats — CRM".
+- **Mapeo extensible**:
+  ```js
+  const HOST_TO_RECORD = {
+    'zerochats-crm': 'zerochats_2026',
+    'zerochats':     'zerochats_2026'  // por si en el futuro se añade alias subdominio
+  };
+  ```
+  Para añadir otro cliente con URL dedicada en el futuro: crear proyecto
+  Vercel + una línea aquí.
+- **Comportamiento esperado**:
+  - Diego entra a `panel-de-metricas.vercel.app` → ve admin con dropdown
+    (sin cambio).
+  - Equipo Zerochats entra a `zerochats-crm.vercel.app` → ve solo Zerochats,
+    sin dropdown, sin badge ADMIN.
+- **Setup ejecutado**:
+  ```bash
+  npx vercel projects add zerochats-crm
+  npx vercel link --project zerochats-crm --yes
+  npx vercel git connect https://github.com/diegorg502-alt/panel-de-metricas-legado --yes
+  npx vercel deploy --prod --yes
+  ```
+- **Auto-deploys**: a partir de ahora, cada push a `main` actualiza tanto
+  `panel-de-metricas.vercel.app` como `zerochats-crm.vercel.app`
+  automáticamente (ambos proyectos están conectados al mismo repo + rama).
+
+---
+
 ## 2026-05-18
 
 ### Reestructurar scope: agendoLlamada + leads totales → solo Zerochats
