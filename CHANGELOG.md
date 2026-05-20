@@ -42,6 +42,55 @@ Cuando un cambio sea genuinamente universal (ej. simplificación de UI sin lógi
 
 ---
 
+## 2026-05-20
+
+### Carpeta dedicada `clients/zerochats/` + subdominio Vercel
+
+- **Carpeta nueva**: `/clients/zerochats/` agrupa toda la documentación
+  específica de Zerochats (el único SaaS de Agencia Legado). Estructura:
+  - `README.md`: visión general + flags activos + reglas de oro.
+  - `functions/README.md`: punteros a las 4 edge functions específicas
+    (`sync-ghl-zerochats`, `ghl-registrado-webhook`, `dedupe-cuotas-zerochats`,
+    `reconcile-zerochats-csv`) con sus comandos de deploy y secrets.
+  - `docs/pricing.md`: planes PRO/BUSINESS/ANUAL + distinción
+    facturación vs caja.
+  - `docs/stripe-fee.md`: por qué la caja BUSINESS es 374€ (no 397€).
+  - `docs/ghl-integration.md`: setup del webhook + sync diario.
+  - `docs/data-model.md`: estructura del JSONB de Zerochats + campos
+    exclusivos (`recurrente`, `pagos`, `agendoLlamada` estricto).
+  - `docs/churn.md`: cómo detectamos churn + fórmulas MRR/LTV pendientes.
+  - `docs/deployment.md`: stack completo + cómo se configuró el subdominio.
+  - `migrations/README.md`: convención para guardar SQL manual ejecutado
+    sobre `crm_data` de `zerochats_2026`.
+- **Decisión de diseño**: las edge functions reales **NO se mueven** de
+  `/supabase/functions/` (el CLI de Supabase las espera ahí). La nueva
+  carpeta solo documenta, no duplica código.
+
+### Subdominio `zerochats.panel-de-metricas.vercel.app`
+
+- **Archivo**: `index.html` (`showApp`, nuevo helper `getForcedRecordFromHost`).
+- **Qué**: detección de host. Si `window.location.host` empieza por
+  `zerochats.`, el panel:
+  - Resuelve el cliente vía `crm_clients.record_id = 'zerochats_2026'`.
+  - Llama `loadClientConfig` con ese email.
+  - Oculta `#admin-client-selector` aunque el usuario sea admin.
+  - Quita `body.is-admin` (vista de cliente puro).
+  - Cambia `document.title` a "Zerochats — CRM".
+- **Mapeo extensible**: `const HOST_TO_RECORD = { zerochats: 'zerochats_2026' }`.
+  Para añadir otro cliente con subdominio dedicado en el futuro: alias en
+  Vercel + una línea aquí. No requiere DNS (el subdominio `.vercel.app` lo
+  gestiona Vercel automáticamente).
+- **Comportamiento esperado**:
+  - Diego entra a `panel-de-metricas.vercel.app` → ve admin con dropdown
+    (sin cambio).
+  - Equipo Zerochats (o Diego) entra a `zerochats.panel-de-metricas.vercel.app`
+    → ve solo Zerochats, sin dropdown, sin badge ADMIN.
+- **Acción pendiente Diego**: añadir el alias en Vercel Dashboard →
+  Settings → Domains → Add → `zerochats.panel-de-metricas.vercel.app`.
+  Sin tocar DNS porque es subdominio del propio `.vercel.app`.
+
+---
+
 ## 2026-05-18
 
 ### Reestructurar scope: agendoLlamada + leads totales → solo Zerochats

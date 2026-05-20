@@ -509,6 +509,21 @@ let HAS_TICKET_MENSUAL=false; // true = show Ticket medio con plan ANUAL dividid
 let HAS_ESCALADO=false; // true = show Estrategia de Escalado section
 let HAS_VISTA_GLOBAL=false; // true = show "Vista global" page con KPIs de todos los embudos a la vez (Lucas test)
 let VISTA_FILTRO='GENERAL'; // filtro activo de la Vista Global
+
+// ── DETECCIÓN DE HOST (subdominio dedicado por cliente) ────────────
+// Si el panel se sirve desde un subdominio dedicado (ej. zerochats.panel-de-metricas.vercel.app)
+// forzamos la carga de ese cliente y ocultamos el dropdown de admin.
+// Mapeo subdominio → record_id. Para añadir un cliente nuevo basta con un alias en Vercel y una línea aquí.
+const HOST_TO_RECORD={
+  'zerochats':'zerochats_2026'
+};
+function getForcedRecordFromHost(){
+  try{
+    const host=(typeof window!=='undefined'&&window.location&&window.location.host)||'';
+    const sub=host.split('.')[0].toLowerCase();
+    return HOST_TO_RECORD[sub]||null;
+  }catch(e){ return null; }
+}
 let MES_FILTERS={embudo:'',closer:'',asistencia:'',estado:'',plan:'',utm_source:'',utm_medium:'',utm_campaign:'',utm_content:'',utm_term:''};
 // Rango de fechas para los KPIs por mes. {from,to} en formato 'YYYY-MM-DD'. Vacío = mes completo.
 let MES_RANGE={from:'',to:''};
@@ -602,7 +617,36 @@ async function showApp(){
   setSyncStatus('saving','Cargando configuración...');
   // Detectar admin
   IS_ADMIN = await isAdminUser(currentUser?.email||'');
-  if(IS_ADMIN){
+  // Si estamos en un subdominio dedicado (ej. zerochats.panel-de-metricas.vercel.app)
+  // forzamos ese cliente y NO mostramos dropdown ni badge de admin, aunque
+  // el usuario sea admin. Diego sigue viendo admin desde la URL principal.
+  const forcedRecord = getForcedRecordFromHost();
+  if(forcedRecord){
+    // Buscar el email del cliente por record_id
+    const{data:forcedCl}=await sb.from('crm_clients').select('record_id, email, nombre').eq('record_id',forcedRecord).maybeSingle();
+    if(forcedCl && forcedCl.email){
+      await loadClientConfig(forcedCl.email);
+      // Ocultar dropdown explícitamente (por si quedó renderizado)
+      const sel=document.getElementById('admin-client-selector');
+      if(sel)sel.style.display='none';
+      // No marcar body como is-admin: el subdominio es vista de cliente puro.
+      document.body.classList.remove('is-admin');
+      document.title = (forcedCl.nombre||'Cliente') + ' — CRM';
+    } else if(IS_ADMIN){
+      // Fallback: si el record forzado no existe, comportamiento admin normal
+      document.body.classList.add('is-admin');
+      const{data:allCl}=await sb.from('crm_clients').select('record_id, email, nombre').order('nombre');
+      ALL_CLIENTS = allCl||[];
+      const lastSel = localStorage.getItem('admin_last_client') || (ALL_CLIENTS[0] && ALL_CLIENTS[0].email) || '';
+      await loadClientConfig(lastSel);
+      const sel=document.getElementById('admin-client-selector');
+      if(sel){ sel.style.display='block'; sel.innerHTML=ALL_CLIENTS.map(c=>`<option value="${esc(c.email)}"${c.email===lastSel?' selected':''}>${esc(c.nombre)}</option>`).join(''); }
+      const kicker=document.getElementById('sb-kicker');
+      if(kicker)kicker.innerHTML='Agencia Legado <span class="admin-badge">ADMIN</span>';
+    } else {
+      await loadClientConfig(currentUser?.email||'');
+    }
+  } else if(IS_ADMIN){
     document.body.classList.add('is-admin');
     // Cargar lista de todos los clientes para el dropdown
     const{data:allCl}=await sb.from('crm_clients').select('record_id, email, nombre').order('nombre');
