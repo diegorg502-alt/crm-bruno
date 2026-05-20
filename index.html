@@ -29,6 +29,13 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 .btn-login:hover{opacity:.85}
 .btn-login:disabled{opacity:.5;cursor:not-allowed}
 .login-error{font-size:12px;color:var(--red);background:var(--red-l);border-radius:7px;padding:8px 12px;display:none}
+.field-pass{position:relative;display:flex;align-items:center}
+.field-pass input{padding-right:42px;width:100%;box-sizing:border-box}
+.pass-toggle{position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;width:34px;height:34px;display:flex;align-items:center;justify-content:center;color:var(--text2);cursor:pointer;border-radius:6px;padding:0;transition:color .15s,background .15s}
+.pass-toggle:hover{color:var(--text);background:var(--bg2)}
+.pass-toggle:focus{outline:none;color:var(--text)}
+.field-remember{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);cursor:pointer;user-select:none;margin-top:-2px}
+.field-remember input[type=checkbox]{width:15px;height:15px;cursor:pointer;accent-color:#262626;margin:0}
 /* APP */
 #shell{display:none;height:100vh}
 .shell{display:flex;height:100%}
@@ -310,22 +317,32 @@ details.acordeon>summary:hover{background:var(--bg3)!important}
 <div id="login-screen" style="display:none">
   <div class="login-wrap">
     <div class="login-brand">Agencia Legado · CRM</div>
-    <div class="login-card">
+    <form class="login-card" id="login-form" onsubmit="event.preventDefault();doLogin();return false" autocomplete="on">
       <div>
         <div class="login-title">Acceder</div>
         <div class="login-sub">Introduce tus credenciales para entrar a tu panel</div>
       </div>
       <div class="field">
-        <label>Email</label>
-        <input id="li-email" type="email" placeholder="tu@email.com" autocomplete="email">
+        <label for="li-email">Email</label>
+        <input id="li-email" name="email" type="email" placeholder="tu@email.com" autocomplete="username" required>
       </div>
       <div class="field">
-        <label>Contraseña</label>
-        <input id="li-pass" type="password" placeholder="••••••••" autocomplete="current-password">
+        <label for="li-pass">Contraseña</label>
+        <div class="field-pass">
+          <input id="li-pass" name="password" type="password" placeholder="••••••••" autocomplete="current-password" required>
+          <button type="button" class="pass-toggle" id="pass-toggle" onclick="togglePassVisibility()" aria-label="Mostrar contraseña" title="Mostrar contraseña">
+            <svg id="pass-eye-on" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg id="pass-eye-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </button>
+        </div>
       </div>
-      <button class="btn-login" id="btn-login" onclick="doLogin()">Entrar →</button>
+      <label class="field-remember" for="li-remember">
+        <input id="li-remember" type="checkbox" checked>
+        <span>Recordarme en este equipo</span>
+      </label>
+      <button type="submit" class="btn-login" id="btn-login">Entrar →</button>
       <div class="login-error" id="li-error">Email o contraseña incorrectos</div>
-    </div>
+    </form>
   </div>
 </div>
 
@@ -546,6 +563,53 @@ let realtimeChannel=null;
 let curYear=new Date().getFullYear();
 
 // ── AUTH ──────────────────────────────────────────────────
+// Auto-guardado por equipo: persistimos email + password ofuscado en localStorage.
+// La ofuscación con btoa NO es cifrado (cualquiera con devtools lo decodifica) pero
+// evita ver la contraseña en claro al inspeccionar el storage. La defensa real es la
+// del navegador: el <form> con autocomplete activado dispara el password manager
+// nativo (Chrome/Safari/1Password), que sí guarda cifrado en el keychain del SO.
+const CRED_KEY='crm_creds_v1';
+function loadStoredCreds(){
+  try{
+    const raw=localStorage.getItem(CRED_KEY);
+    if(!raw)return null;
+    const c=JSON.parse(raw);
+    return {email:c.email||'',pwd:c.pwd?atob(c.pwd):''};
+  }catch(e){ return null; }
+}
+function saveStoredCreds(email,pass){
+  try{ localStorage.setItem(CRED_KEY,JSON.stringify({email:email||'',pwd:pass?btoa(pass):''})); }catch(e){}
+}
+function clearStoredCreds(){
+  try{ localStorage.removeItem(CRED_KEY); }catch(e){}
+}
+function prefillLogin(){
+  const c=loadStoredCreds();
+  const em=document.getElementById('li-email');
+  const pw=document.getElementById('li-pass');
+  const rm=document.getElementById('li-remember');
+  if(!c)return;
+  if(c.email&&em)em.value=c.email;
+  if(c.pwd&&pw)pw.value=c.pwd;
+  if(rm)rm.checked=!!(c.email&&c.pwd);
+}
+function togglePassVisibility(){
+  const inp=document.getElementById('li-pass');
+  const on=document.getElementById('pass-eye-on');
+  const off=document.getElementById('pass-eye-off');
+  const btn=document.getElementById('pass-toggle');
+  if(!inp)return;
+  const showing=inp.type==='text';
+  inp.type=showing?'password':'text';
+  if(on)on.style.display=showing?'':'none';
+  if(off)off.style.display=showing?'none':'';
+  if(btn){
+    const label=showing?'Mostrar contraseña':'Ocultar contraseña';
+    btn.title=label;
+    btn.setAttribute('aria-label',label);
+  }
+}
+
 async function init(){
   const{data:{session}}=await sb.auth.getSession();
   document.getElementById('loading').style.display='none';
@@ -553,6 +617,7 @@ async function init(){
     currentUser=session.user;
     showApp();
   } else {
+    prefillLogin();
     document.getElementById('login-screen').style.display='flex';
   }
 }
@@ -560,6 +625,7 @@ async function init(){
 async function doLogin(){
   const email=document.getElementById('li-email').value.trim();
   const pass=document.getElementById('li-pass').value;
+  const remember=document.getElementById('li-remember')?.checked!==false;
   const btn=document.getElementById('btn-login');
   const err=document.getElementById('li-error');
   err.style.display='none';
@@ -571,6 +637,9 @@ async function doLogin(){
     return;
   }
   currentUser=data.user;
+  // Persistir credenciales en este equipo si el usuario lo permite
+  if(remember){ saveStoredCreds(email,pass); }
+  else{ clearStoredCreds(); }
   document.getElementById('login-screen').style.display='none';
   showApp();
 }
@@ -579,11 +648,15 @@ async function doLogout(){
   await sb.auth.signOut();
   document.getElementById('shell').style.display='none';
   document.getElementById('login-screen').style.display='flex';
+  // Limpiar el input de password en pantalla pero respetar lo que el usuario
+  // tenga guardado (si tenía Recordarme activo, prefillLogin lo rellena).
   document.getElementById('li-pass').value='';
+  prefillLogin();
   S={llamadas:{},kpis_diarios:{},objetivos:{},cuotas:[],renovaciones:[],ads:{},contactados:[],clientes:{},balance:{gastos:[],impuestos_pct:25},lanzamientos:[],escalado:{config:null,evaluaciones:[]}};
 }
 
-document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('login-screen').style.display!=='none')doLogin();});
+// Nota: el listener de Enter ya no hace falta — el <form id="login-form">
+// dispara submit en Enter de forma nativa y onsubmit llama a doLogin().
 
 // ── SUPABASE DATA ─────────────────────────────────────────
 async function isAdminUser(email){
