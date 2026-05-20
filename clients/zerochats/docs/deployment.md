@@ -4,7 +4,7 @@
 
 | Pieza | Plataforma | URL/ref |
 |---|---|---|
-| Panel web | Vercel | `panel-de-metricas.vercel.app` (Diego) + `zerochats.panel-de-metricas.vercel.app` (Zerochats) |
+| Panel web | Vercel | `panel-de-metricas.vercel.app` (Diego) + `zerochats-crm.vercel.app` (Zerochats) |
 | Backend datos | Supabase | proyecto `obeopzavwnquapjdjwrx` |
 | Edge functions | Supabase Functions | desde `/supabase/functions/` |
 | CRM operativo | GoHighLevel | location `pJyuDyDmqRLuYm63c6Oj` |
@@ -12,37 +12,52 @@
 
 ---
 
-## Subdominio `zerochats.panel-de-metricas.vercel.app`
+## URL dedicada `zerochats-crm.vercel.app`
 
-### Cómo se configuró (paso a paso, una vez)
+### Cómo se configuró (proyecto Vercel separado, no subdominio)
 
-1. Entrar a [vercel.com](https://vercel.com) → proyecto `panel-de-metricas`.
-2. **Settings → Domains → Add Domain**.
-3. Escribir: `zerochats.panel-de-metricas.vercel.app`.
-4. Vercel detecta que es un subdominio de su propio dominio (`vercel.app`),
-   no pide DNS, lo configura automáticamente en segundos.
-5. En la lista de dominios, marcar como **alias del branch `main`** (no
-   branch-specific).
+Decisión: en vez de añadir un subdominio anidado (`zerochats.panel-de-metricas.vercel.app`)
+al proyecto existente, creamos un **proyecto Vercel independiente** conectado
+al mismo repo + rama `main`. Ventajas: URL más limpia, logs y métricas
+separados, sin tocar el dashboard de Vercel.
+
+Setup ejecutado una vez:
+```bash
+# 1. Crear proyecto vacío en Vercel
+npx vercel projects add zerochats-crm
+
+# 2. Linkear el repo local al nuevo proyecto
+npx vercel link --project zerochats-crm --yes
+
+# 3. Conectar el proyecto a GitHub (auto-deploys en push a main)
+npx vercel git connect https://github.com/diegorg502-alt/panel-de-metricas-legado --yes
+
+# 4. Deploy inicial a producción
+npx vercel deploy --prod --yes
+```
+
+Resultado: `https://zerochats-crm.vercel.app` operativo y vinculado al mismo
+repo. Cada push a `main` desplegará **dos proyectos en paralelo** automáticamente
+(`panel-de-metricas` + `zerochats-crm`).
 
 ### Detección en frontend
 
 `index.html` mira `window.location.host` en `showApp()`. Si el host empieza
-por `zerochats.`:
-- Resuelve el record llamando a `crm_clients` con `auto_renew = true` (o por
-  record_id `zerochats_2026`).
+por `zerochats-crm` (o `zerochats.` como alias futuro):
+- Resuelve el record vía `crm_clients.record_id = 'zerochats_2026'`.
 - Llama directamente a `loadClientConfig(email_zerochats)`.
 - **Oculta** `#admin-client-selector` aunque el usuario sea admin.
 - Cambia el título del navegador a `Zerochats — CRM`.
 
 Resultado:
 - Diego entra a `panel-de-metricas.vercel.app` → ve admin con dropdown.
-- Cualquiera (incluido Diego) entra a `zerochats.panel-de-metricas.vercel.app`
-  → ve solo Zerochats, sin dropdown.
+- Cualquiera (incluido Diego) entra a `zerochats-crm.vercel.app` → ve solo
+  Zerochats, sin dropdown.
 
-### Para volver a admin desde el subdominio
+### Para volver a admin desde la URL de Zerochats
 
-Si Diego está en el subdominio y quiere volver a admin: cambiar la URL a
-`panel-de-metricas.vercel.app` manualmente.
+Si Diego está en `zerochats-crm.vercel.app` y quiere volver a admin: cambiar
+la URL a `panel-de-metricas.vercel.app` manualmente.
 
 ---
 

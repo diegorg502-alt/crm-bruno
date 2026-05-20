@@ -13,19 +13,20 @@ referencias a las edge functions que lo alimentan y migraciones SQL puntuales.
 
 - **URL principal Agencia (admin):** `panel-de-metricas.vercel.app`
   → Diego entra aquí y ve a todos los clientes con el dropdown del admin.
-- **URL dedicada Zerochats:** `zerochats.panel-de-metricas.vercel.app`
+- **URL dedicada Zerochats:** `zerochats-crm.vercel.app`
   → El equipo de Zerochats entra aquí y ve **solo** sus datos. No hay dropdown
   de clientes ni modo admin visible.
 
 La detección se hace en `index.html` por `window.location.host`. Si el host
-empieza por `zerochats.` el panel:
+empieza por `zerochats-crm` (o `zerochats`) el panel:
 - Carga directamente el `record_id = zerochats_2026`.
 - Oculta el `<select id="admin-client-selector">`.
 - Cambia el título del navegador a `Zerochats — CRM`.
 
-> **Importante**: el subdominio `*.vercel.app` lo gestiona Vercel
-> automáticamente — no requiere configuración DNS. Solo añadir el alias en el
-> dashboard del proyecto (Settings → Domains → Add → `zerochats.panel-de-metricas.vercel.app`).
+> **Arquitectura**: `zerochats-crm.vercel.app` es un **proyecto Vercel
+> independiente** (no un subdominio del panel principal) conectado al mismo
+> repositorio de GitHub. Cada push a `main` despliega los dos proyectos en
+> paralelo. No requiere DNS — Vercel asigna el `.vercel.app` automáticamente.
 
 ---
 

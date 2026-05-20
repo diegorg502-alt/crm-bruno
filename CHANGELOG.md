@@ -66,28 +66,51 @@ Cuando un cambio sea genuinamente universal (ej. simplificación de UI sin lógi
   `/supabase/functions/` (el CLI de Supabase las espera ahí). La nueva
   carpeta solo documenta, no duplica código.
 
-### Subdominio `zerochats.panel-de-metricas.vercel.app`
+### URL dedicada `zerochats-crm.vercel.app` (proyecto Vercel propio)
 
 - **Archivo**: `index.html` (`showApp`, nuevo helper `getForcedRecordFromHost`).
-- **Qué**: detección de host. Si `window.location.host` empieza por
-  `zerochats.`, el panel:
+- **Decisión de arquitectura**: en vez de añadir un subdominio anidado al
+  proyecto existente (`zerochats.panel-de-metricas.vercel.app`), creamos un
+  **proyecto Vercel separado** llamado `zerochats-crm` apuntando al mismo
+  repositorio de GitHub y rama `main`. Vercel le asigna automáticamente
+  `https://zerochats-crm.vercel.app` sin necesidad de configurar DNS.
+- **Ventajas frente al subdominio**:
+  - URL más limpia y "marca propia" para Zerochats.
+  - Logs, métricas y deploys independientes (sin mezclarse con los del panel
+    principal).
+  - Permite a futuro distintos secrets / env vars si hiciese falta.
+  - Se configuró sin tener que tocar la UI de Vercel (vía CLI).
+- **Qué hace el frontend**: detección de host. Si `window.location.host`
+  empieza por `zerochats-crm` (o `zerochats.`), el panel:
   - Resuelve el cliente vía `crm_clients.record_id = 'zerochats_2026'`.
   - Llama `loadClientConfig` con ese email.
   - Oculta `#admin-client-selector` aunque el usuario sea admin.
   - Quita `body.is-admin` (vista de cliente puro).
   - Cambia `document.title` a "Zerochats — CRM".
-- **Mapeo extensible**: `const HOST_TO_RECORD = { zerochats: 'zerochats_2026' }`.
-  Para añadir otro cliente con subdominio dedicado en el futuro: alias en
-  Vercel + una línea aquí. No requiere DNS (el subdominio `.vercel.app` lo
-  gestiona Vercel automáticamente).
+- **Mapeo extensible**:
+  ```js
+  const HOST_TO_RECORD = {
+    'zerochats-crm': 'zerochats_2026',
+    'zerochats':     'zerochats_2026'  // por si en el futuro se añade alias subdominio
+  };
+  ```
+  Para añadir otro cliente con URL dedicada en el futuro: crear proyecto
+  Vercel + una línea aquí.
 - **Comportamiento esperado**:
   - Diego entra a `panel-de-metricas.vercel.app` → ve admin con dropdown
     (sin cambio).
-  - Equipo Zerochats (o Diego) entra a `zerochats.panel-de-metricas.vercel.app`
-    → ve solo Zerochats, sin dropdown, sin badge ADMIN.
-- **Acción pendiente Diego**: añadir el alias en Vercel Dashboard →
-  Settings → Domains → Add → `zerochats.panel-de-metricas.vercel.app`.
-  Sin tocar DNS porque es subdominio del propio `.vercel.app`.
+  - Equipo Zerochats entra a `zerochats-crm.vercel.app` → ve solo Zerochats,
+    sin dropdown, sin badge ADMIN.
+- **Setup ejecutado**:
+  ```bash
+  npx vercel projects add zerochats-crm
+  npx vercel link --project zerochats-crm --yes
+  npx vercel git connect https://github.com/diegorg502-alt/panel-de-metricas-legado --yes
+  npx vercel deploy --prod --yes
+  ```
+- **Auto-deploys**: a partir de ahora, cada push a `main` actualiza tanto
+  `panel-de-metricas.vercel.app` como `zerochats-crm.vercel.app`
+  automáticamente (ambos proyectos están conectados al mismo repo + rama).
 
 ---
 

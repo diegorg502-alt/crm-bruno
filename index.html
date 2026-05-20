@@ -513,8 +513,13 @@ let VISTA_FILTRO='GENERAL'; // filtro activo de la Vista Global
 // ── DETECCIÓN DE HOST (subdominio dedicado por cliente) ────────────
 // Si el panel se sirve desde un subdominio dedicado (ej. zerochats.panel-de-metricas.vercel.app)
 // forzamos la carga de ese cliente y ocultamos el dropdown de admin.
-// Mapeo subdominio → record_id. Para añadir un cliente nuevo basta con un alias en Vercel y una línea aquí.
+// Mapeo host → record_id. Para añadir un cliente nuevo basta con crear el proyecto/alias en Vercel y una línea aquí.
+// Se compara contra la primera "etiqueta" del host (lo que hay antes del primer punto).
+// Ejemplos válidos:
+//   - 'zerochats-crm' matchea 'zerochats-crm.vercel.app' (proyecto Vercel dedicado).
+//   - 'zerochats' matchea 'zerochats.panel-de-metricas.vercel.app' (alias subdominio, si se llegara a usar).
 const HOST_TO_RECORD={
+  'zerochats-crm':'zerochats_2026',
   'zerochats':'zerochats_2026'
 };
 function getForcedRecordFromHost(){
